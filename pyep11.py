@@ -735,3 +735,104 @@ def GetMechanismList(target):
         result.append(name)
 
     return " ".join(result), None
+
+############################################################################################
+############################################################################################
+
+def WrapKey(target, mechanism, kek, key):    
+
+    mecharena = Arena()
+    mech_struct = CK_MECHANISM()
+    mech_struct.mechanism = c_ulong(mechanism.Mechanism)
+
+    if mechanism.Parameter:
+        buf_ptr, buf_len = mecharena.allocate(mechanism.Parameter)
+        mech_struct.pParameter = buf_ptr
+        mech_struct.ulParameterLen = buf_len
+    else:
+        mech_struct.pParameter = None
+        mech_struct.ulParameterLen = 0
+
+    if kek:
+        kek_buf = (c_ubyte * len(kek))(*kek)
+        kekC = cast(kek_buf, POINTER(c_ubyte))
+        kekLenC = c_ulong(len(kek))
+    else:
+        kekC = None
+        LenC = c_ulong(0)
+
+    if key:
+        key_buf = (c_ubyte * len(key))(*key)
+        keyC = cast(key_buf, POINTER(c_ubyte))
+        keyLenC = c_ulong(len(key))
+    else:
+        keyC = None
+        LenC = c_ulong(0)
+
+     # Prepare wrappedKeynature buffer
+    wrappedKey = create_string_buffer(MAX_BLOB_SIZE)
+    wrappedKeyC = cast(wrappedKey, POINTER(c_ubyte))
+    wrappedKeyLenC = c_ulong(MAX_BLOB_SIZE)
+
+    rv = ep11.m_WrapKey(keyC, keyLenC, kekC, kekLenC, None, 0 , byref(mech_struct), wrappedKeyC, byref(wrappedKeyLenC), target)
+
+    if rv != CKR_OK:
+        e1 = toError(rv)
+        return None, e1
+
+    # Resize the cipher array based on the returned cipher length
+    wrappedKey = wrappedKey[:wrappedKeyLenC.value]
+    return wrappedKey, None
+
+############################################################################################
+############################################################################################
+
+def UnwrapKey(target, mechanism, kek, key, attr):  
+    mecharena = Arena()
+    mech_struct = CK_MECHANISM()
+    mech_struct.mechanism = c_ulong(mechanism.Mechanism)
+
+    attrarena, t, tcount = convert_attributes_to_ck(attr)
+
+    if mechanism.Parameter:
+        buf_ptr, buf_len = mecharena.allocate(mechanism.Parameter)
+        mech_struct.pParameter = buf_ptr
+        mech_struct.ulParameterLen = buf_len
+    else:
+        mech_struct.pParameter = None
+        mech_struct.ulParameterLen = 0
+
+    if kek:
+        kek_buf = (c_ubyte * len(kek))(*kek)
+        kekC = cast(kek_buf, POINTER(c_ubyte))
+        kekLenC = c_ulong(len(kek))
+    else:
+        kekC = None
+        LenC = c_ulong(0)
+
+    if key:
+        key_buf = (c_ubyte * len(key))(*key)
+        keyC = cast(key_buf, POINTER(c_ubyte))
+        keyLenC = c_ulong(len(key))
+    else:
+        keyC = None
+        LenC = c_ulong(0)
+
+     # Prepare wrappedKeynature buffer
+    unwrappedKey = create_string_buffer(MAX_BLOB_SIZE)
+    unwrappedKeyC = cast(unwrappedKey, POINTER(c_ubyte))
+    unwrappedKeyLenC = c_ulong(MAX_BLOB_SIZE)
+
+    # Prepare wrappedKeynature buffer
+    cSum = create_string_buffer(MAX_CSUMSIZE)
+    cSumC = cast(cSum, POINTER(c_ubyte))
+    cSumLenC = c_ulong(MAX_CSUMSIZE)
+
+    rv = ep11.m_UnwrapKey(keyC, keyLenC, kekC, kekLenC, None, 0, LoginBlob, LoginBlobLen, byref(mech_struct), t, tcount, unwrappedKeyC, byref(unwrappedKeyLenC), cSumC, byref(cSumLenC), target)
+    if rv != CKR_OK:
+        e1 = toError(rv)
+        return None, e1
+
+    # Resize the cipher array based on the returned cipher length
+    unwrappedKey = unwrappedKey[:unwrappedKeyLenC.value]
+    return unwrappedKey, None

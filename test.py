@@ -1,6 +1,6 @@
 # main.py
 from ep11constants import *
-from pyep11 import Mechanism,Attribute, HsmInit, GenerateRandom,GenerateKey,GenerateKeyPair,OIDNamedCurveSecp256k1, SignSingle, VerifySingle,Reencipher, EncryptSingle,DecryptSingle,ReencryptSingle,GetMechanismList
+from pyep11 import Mechanism,Attribute, HsmInit, GenerateRandom,GenerateKey,GenerateKeyPair,OIDNamedCurveSecp256k1, SignSingle, VerifySingle,Reencipher, EncryptSingle,DecryptSingle,ReencryptSingle,GetMechanismList,WrapKey,UnwrapKey
 from pyasn1.codec.der.encoder import encode
 
 
@@ -20,7 +20,8 @@ def main():
     mech = Mechanism(CKM_AES_KEY_GEN,params)
     keyTemplate = [
       Attribute(CKA_VALUE_LEN, 32),
-      Attribute(CKA_UNWRAP, False),
+      Attribute(CKA_UNWRAP, True),
+      Attribute(CKA_WRAP, True),
       Attribute(CKA_ENCRYPT, True),
    ]
 
@@ -130,6 +131,27 @@ def main():
       print(f"Verification failed: {error}")
     else:
       print("Signature is valid!")
+
+    mech = Mechanism(CKM_AES_CBC_PAD, iv)
+    wrappedkey, error = WrapKey(target,  mech, aeskey, aeskey2)
+    if error:
+       print(f"Error: {error}")
+    else:
+       print(f"Generated wrapped key: {wrappedkey.hex()}")
+
+    keyTemplate = [
+      Attribute(CKA_KEY_TYPE, CKK_AES),
+      Attribute(CKA_VALUE_LEN, 32),
+      Attribute(CKA_UNWRAP, True),
+      Attribute(CKA_WRAP, True),
+      Attribute(CKA_ENCRYPT, True),
+    ]
+    unwrappedkey, error = UnwrapKey(target,  mech, aeskey, wrappedkey,keyTemplate)
+    if error:
+       print(f"Error: {error}")
+    else:
+       print(f"Generated unwrapped key: {unwrappedkey.hex()}")
+
 
 if __name__ == "__main__":
     main()
