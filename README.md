@@ -1,4 +1,4 @@
-# ep11py
+# ep11py EP11 PKCS#11 Python Binding
 
 Python wrapper to use IBM EP11 native library to invoke cryptographic operations
 
