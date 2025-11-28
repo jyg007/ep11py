@@ -32,7 +32,7 @@ def main():
     # Assuming GenerateKey returns a tuple (key, error)
 
 
-    aeskey, error = GenerateKey(target, mech, keyTemplate)
+    aeskey, csum, error = GenerateKey(target, mech, keyTemplate)
 
     # Check if there was an error
     if error:
@@ -67,7 +67,7 @@ def main():
         print(f"Plaintext: {plain.decode('utf-8', errors='ignore')}")
 
     mech = Mechanism(CKM_AES_KEY_GEN,None)
-    aeskey2, error = GenerateKey(target, mech, keyTemplate)
+    aeskey2, csum,error = GenerateKey(target, mech, keyTemplate)
     if error:
        print(f"Error: {error}")
     else:
@@ -91,11 +91,13 @@ def main():
 
     print("\n")
     ecParameters = encode(OIDNamedCurveSecp256k1)
+    
     mech = Mechanism(CKM_EC_KEY_PAIR_GEN,None)
     publicKeyECTemplate = [
             Attribute(CKA_EC_PARAMS, ecParameters),
             Attribute(CKA_VERIFY, True),
     ]
+    print(publicKeyECTemplate)
     privateKeyECTemplate = [
             Attribute(CKA_EC_PARAMS, ecParameters),
             Attribute(CKA_SIGN, True),
@@ -146,7 +148,7 @@ def main():
       Attribute(CKA_WRAP, True),
       Attribute(CKA_ENCRYPT, True),
     ]
-    unwrappedkey, error = UnwrapKey(target,  mech, aeskey, wrappedkey,keyTemplate)
+    unwrappedkey, csum, error = UnwrapKey(target,  mech, aeskey, wrappedkey,keyTemplate)
     if error:
        print(f"Error: {error}")
     else:

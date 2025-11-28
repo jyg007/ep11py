@@ -175,6 +175,7 @@ class Attribute:
         else:
             raise TypeError("Unhandled attribute value type")
 
+        self.Length = c_ulong(len(self.Value))
        # self.Value = value  # This will be a byte string or byte array
 
     def get_value_as_buffer(self):
@@ -220,6 +221,7 @@ def convert_attributes_to_ck(attributes):
         ck_attrs.append(ck_attr)
 
     # Allocate final array
+    #print(*ck_attrs)
     ck_array = (CK_ATTRIBUTE * len(ck_attrs))(*ck_attrs)
     return arena, ck_array, c_ulong(len(ck_attrs))
 
@@ -259,12 +261,13 @@ def GenerateKey(target, mechanism, temp_attributes):
     CheckSum = create_string_buffer(MAX_CSUMSIZE)
 
     keyLenC = c_ulong(len(Key))
+    checkSumLenC = c_ulong(len(Key))
 
     rc = ep11.m_GenerateKey(
         byref(mech_struct), t, tcount,
         LoginBlob, LoginBlobLen,
         cast(Key, POINTER(c_ubyte)), byref(keyLenC),
-        cast(CheckSum, POINTER(c_ubyte)), byref(c_ulong(len(CheckSum))),
+        cast(CheckSum, POINTER(c_ubyte)), byref(checkSumLenC),
         target
     )
 
@@ -272,9 +275,9 @@ def GenerateKey(target, mechanism, temp_attributes):
         return None, toError(rc)
 
     key_bytes = Key.raw[:keyLenC.value]
-    #checksum_bytes = CheckSum.raw[:checkSumLenC.value]
+    checksum_bytes = CheckSum.raw[:checkSumLenC.value]
 
-    return key_bytes, None
+    return key_bytes, checksum_bytes , None
 
 ############################################################################################
 ############################################################################################
@@ -831,8 +834,51 @@ def UnwrapKey(target, mechanism, kek, key, attr):
     rv = ep11.m_UnwrapKey(keyC, keyLenC, kekC, kekLenC, None, 0, LoginBlob, LoginBlobLen, byref(mech_struct), t, tcount, unwrappedKeyC, byref(unwrappedKeyLenC), cSumC, byref(cSumLenC), target)
     if rv != CKR_OK:
         e1 = toError(rv)
-        return None, e1
+        return None, None,e1
 
     # Resize the cipher array based on the returned cipher length
     unwrappedKey = unwrappedKey[:unwrappedKeyLenC.value]
-    return unwrappedKey, None
+    cSum = cSum[:cSumLenC.value]
+    return unwrappedKey, cSum, None
+
+############################################################################################
+############################################################################################
+CK_ULONG = ctypes.c_ulong
+CK_RSA_PKCS_MGF_TYPE = CK_ULONG                 # alias
+CK_RSA_PKCS_OAEP_SOURCE_TYPE = CK_ULONG 
+CK_VOID_PTR  = ctypes.c_void_p 
+
+# Define CK_RSA_PKCS_OAEP_PARAMS in Python
+class CK_RSA_PKCS_OAEP_PARAMS(ctypes.Structure):
+    _fields_ = [
+        ("hashAlg", CK_MECHANISM_TYPE),
+        ("mgf", CK_RSA_PKCS_MGF_TYPE),
+        ("source", CK_RSA_PKCS_OAEP_SOURCE_TYPE),
+        ("pSourceData", CK_VOID_PTR),
+        ("ulSourceDataLen", CK_ULONG),
+    ]
+
+
+def NewOAEPParams(hash_alg: int, mgf: int, source_type: int, source_data: bytes):
+    params = CK_RSA_PKCS_OAEP_PARAMS()
+
+    params.hashAlg = CK_MECHANISM_TYPE(hash_alg)
+    params.mgf = CK_RSA_PKCS_MGF_TYPE(mgf)
+    params.source = CK_RSA_PKCS_OAEP_SOURCE_TYPE(source_type)
+
+    if not source_data:
+        # No source data
+        params.pSourceData = CK_VOID_PTR(None)
+        params.ulSourceDataLen = CK_ULONG(0)
+    else:
+        # Allocate a buffer for the source data
+        buf = ctypes.create_string_buffer(source_data)
+        params.pSourceData = ctypes.cast(buf, CK_VOID_PTR)
+        params.ulSourceDataLen = CK_ULONG(len(source_data))
+
+        # Important: keep buffer alive by attaching to object
+        params._source_buf = buf
+
+    # Return raw bytes like Go's memBytes()
+    size = ctypes.sizeof(params)
+    return bytes(ctypes.string_at(ctypes.byref(params), size))
