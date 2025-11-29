@@ -583,7 +583,7 @@ def GenerateRandom(target, length):
 
 ## HsmInit implementation
 ## Set Single for reenciphering
-def HsmInit(input_str, single=False):
+def HsmInit(input_str):
     rc = ep11.m_init()
     if rc != XCP_OK:
         print("pyep11 init error", file=sys.stderr)
@@ -594,6 +594,8 @@ def HsmInit(input_str, single=False):
     module.version = XCP_MOD_VERSION
 
     pairs = input_str.strip().split()
+    use_virtual = len(pairs) > 1
+
     for pair in pairs:
         if '.' not in pair:
             print(f"Invalid format: {pair}")
@@ -609,10 +611,10 @@ def HsmInit(input_str, single=False):
         for i in range(32):
             module.domainmask[i] = 0
         XCPTGTMASK_SET_DOM(module.domainmask, domain)
-        if single:
-            module.flags |=  XCP_MFL_PROBE | XCP_MFL_MODULE
-        else:
+        if use_virtual:
             module.flags |= XCP_MFL_VIRTUAL | XCP_MFL_PROBE | XCP_MFL_MODULE
+        else:
+            module.flags |=  XCP_MFL_PROBE | XCP_MFL_MODULE
 
         #dump_module(module)
         rc = ep11.m_add_module(byref(module), byref(target))

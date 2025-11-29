@@ -6,7 +6,7 @@ from pyasn1.codec.der.encoder import encode
 
 
 def main():
-    target = HsmInit("3.19",True)
+    target = HsmInit("3.19")
 
     mechanisms, error = GetMechanismList(target)
 

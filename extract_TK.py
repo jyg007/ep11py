@@ -6,7 +6,7 @@ import binascii
 import sys
 
 def main():
-    target = HsmInit("3.19",True)
+    target = HsmInit("3.19")
 
     keyTemplate = [
       Attribute(CKA_KEY_TYPE, CKK_AES),
