@@ -3,7 +3,7 @@ import os
 import sys
 from ctypes import byref, c_uint, c_ubyte, c_char_p,c_uint32, c_uint64, c_char, c_void_p, POINTER, c_ulong, cast, create_string_buffer, Structure
 import binascii
-from .ep11mechs import *
+from ep11mechs import *
 
 from pyasn1.type.univ import ObjectIdentifier
 # Load the EP11 shared library
@@ -619,7 +619,6 @@ def HsmInit(input_str):
         rc = ep11.m_add_module(byref(module), byref(target))
         if rc != CKR_OK:
             print(toError(rc))
-            sys.exit(1)
 
     hex_string = os.getenv("EP11LOGIN")
     if hex_string:
