@@ -594,7 +594,8 @@ def HsmInit(input_str):
 
     pairs = input_str.strip().split()
     use_virtual = len(pairs) > 1
-
+    success_count = 0
+   
     for pair in pairs:
         if '.' not in pair:
             print(f"Invalid format: {pair}")
@@ -619,6 +620,13 @@ def HsmInit(input_str):
         rc = ep11.m_add_module(byref(module), byref(target))
         if rc != CKR_OK:
             print(toError(rc))
+        else:
+            success_count += 1 
+
+    # Only fail if all modules failed 
+    if success_count == 0:
+        print("All modules failed to initialize", file=sys.stderr)
+        sys.exit(1)
 
     hex_string = os.getenv("EP11LOGIN")
     if hex_string:
