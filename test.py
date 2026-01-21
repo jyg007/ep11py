@@ -1,12 +1,57 @@
 # main.py
 from ep11constants import *
-from pyep11 import Mechanism,Attribute, HsmInit, GenerateRandom,GenerateKey,GenerateKeyPair,OIDNamedCurveSecp256k1, SignSingle, VerifySingle,Reencipher, EncryptSingle,DecryptSingle,ReencryptSingle,GetMechanismList,WrapKey,UnwrapKey
+from pyep11 import Mechanism,Attribute, HsmInit, GenerateRandom,GenerateKey,GenerateKeyPair,OIDNamedCurveSecp256k1, SignSingle, VerifySingle,Reencipher, EncryptSingle,DecryptSingle,ReencryptSingle,GetMechanismList,WrapKey,UnwrapKey,DeriveKey, NewBTCDeriveParams
 from pyasn1.codec.der.encoder import encode
 
+import binascii,os
+from pyasn1.codec.der.encoder import encode as asn1_encode
+
+def slip10_deriveKey(
+    target: int,
+    derive_type: int ,
+    child_key_index: int,
+    hardened: bool,
+    base_key: bytes,
+    chain_code: bytes ,
+):
+    # --- Hardened derivation ---
+    if hardened:
+        child_key_index += CK_IBM_BTC_BIP0032_HARDENED
+
+    # --- EC parameters (secp256k1) ---
+    ecParameters = encode(OIDNamedCurveSecp256k1)
+
+    # --- Derive key template ---
+    DeriveKeyTemplate = {
+        Attribute(CKA_EC_PARAMS, ecParameters),
+        Attribute(CKA_SIGN, True),
+        Attribute(CKA_PRIVATE, True),
+        Attribute(CKA_SENSITIVE, True),
+        Attribute(CKA_VERIFY, True),
+        Attribute(CKA_DERIVE, True),
+        Attribute(CKA_KEY_TYPE,CKK_ECDSA),
+        Attribute(CKA_VALUE_LEN,0),
+        Attribute(CKA_IBM_USE_AS_DATA, True)
+    }
+
+    # --- Derive key ---
+    try:
+        mech = Mechanism( CKM_IBM_BTC_DERIVE, NewBTCDeriveParams( derive_type,child_key_index , chain_code, XCP_BTC_VERSION))
+
+        new_key_bytes, checksum = DeriveKey(
+            target,
+            mech,
+            base_key,
+            DeriveKeyTemplate,
+        )
+    except Exception as e:
+        raise RuntimeError(f"Derived Child Key request error: {e}") from e
+
+    return new_key_bytes, checksum
 
 
 def main():
-    target = HsmInit("3.19 4.21")
+    target = HsmInit("3.19")
 
     mechanisms, error = GetMechanismList(target)
 
@@ -154,6 +199,27 @@ def main():
     else:
        print(f"Generated unwrapped key: {unwrappedkey.hex()}")
 
+    # --- Decode MASTERSEED from hex ---
+    masterseed_hex = os.environ.get("MASTERSEED")
+    if not masterseed_hex:
+        raise RuntimeError("MASTERSEED environment variable not set")
+
+    seed = binascii.unhexlify(masterseed_hex)
+
+    # --- Path split ---
+    #path = sys.argv[1].encode().split(b"/")
+
+    # --- SLIP-10 master derivation ---
+    sk, chaincode = slip10_deriveKey( target, CK_IBM_BTC_SLIP0010_MASTERK, 0, False, seed, None)
+    print(f"Generated derived key: {sk.hex()}")
+    print(f"Generated derived chaincode: {chaincode.hex()}")
+    childsk, childchaincode = slip10_deriveKey( target, CK_IBM_BTC_SLIP0010_PRV2PRV, 1, True, sk, chaincode)
+    print(f"Generated derived childkey: {childsk.hex()}")
+    print(f"Generated derived childchaincode: {childchaincode.hex()}")
+    childpub, childpubchaincode = slip10_deriveKey( target, CK_IBM_BTC_SLIP0010_PRV2PUB, 1, True, sk, chaincode)
+    print(f"Generated derived childpubkey: {childpub.hex()}")
+    print(f"Generated derived childpubchaincode: {childpubchaincode.hex()}")
+    
 
 if __name__ == "__main__":
     main()

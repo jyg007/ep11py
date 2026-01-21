@@ -23,6 +23,7 @@ ep11 = ctypes.CDLL("libep11.so")
 ############################################################################################
 
 # Constants  as defined in ep11.h and ep11adm.h
+
 XCP_OK = 0
 CKR_OK = 0
 XCP_MOD_VERSION = 2
@@ -193,6 +194,10 @@ class Arena:
         b = create_string_buffer(bytes(buf))
         self.allocations.append(b)
         return cast(b, c_void_p), len(buf)
+    def Free(self):
+        # Explicitly drop references so GC can reclaim memory
+        self.allocations.clear()
+
 
 class Mechanism:
     def __init__(self, mechanism, parameter=None, generator=None):
@@ -855,6 +860,7 @@ CK_ULONG = ctypes.c_ulong
 CK_RSA_PKCS_MGF_TYPE = CK_ULONG                 # alias
 CK_RSA_PKCS_OAEP_SOURCE_TYPE = CK_ULONG 
 CK_VOID_PTR  = ctypes.c_void_p 
+CK_BYTE_PTR = ctypes.POINTER(ctypes.c_ubyte)
 
 # Define CK_RSA_PKCS_OAEP_PARAMS in Python
 class CK_RSA_PKCS_OAEP_PARAMS(ctypes.Structure):
@@ -909,3 +915,103 @@ def normalize_low_s_raw64(sig64: bytes, curve_order=SECP256K1_ORDER) -> bytes:
         return sig64
     s = SECP256K1_ORDER - s
     return r.to_bytes(32, "big") + s.to_bytes(32, "big")
+
+class CK_IBM_BTC_DERIVE_PARAMS(ctypes.Structure):
+    _fields_ = [
+        ("type", CK_ULONG),
+        ("childKeyIndex", CK_ULONG),
+        ("pChainCode", CK_BYTE_PTR),
+        ("ulChainCodeLen", CK_ULONG),
+        ("version", CK_ULONG),
+    ]
+
+def NewBTCDeriveParams(
+    derive_type: int,
+    child_key_index: int,
+    chain_code: bytes,
+    version: int,
+) -> bytes:
+
+    params = CK_IBM_BTC_DERIVE_PARAMS()
+
+    params.type = ctypes.c_ulong(derive_type)
+    params.childKeyIndex = ctypes.c_ulong(child_key_index)
+    params.version = ctypes.c_ulong(version)
+
+    if not chain_code:
+        # No chain code
+        params.pChainCode = ctypes.POINTER(ctypes.c_ubyte)()
+        params.ulChainCodeLen = ctypes.c_ulong(0)
+    else:
+        # Allocate buffer for chain code
+        buf = ctypes.create_string_buffer(chain_code)
+        params.pChainCode = ctypes.cast(buf, ctypes.POINTER(ctypes.c_ubyte))
+        params.ulChainCodeLen = ctypes.c_ulong(len(chain_code))
+
+        # Prevent GC while params lives
+        params._chain_buf = buf
+    # IMPORTANT: keep a reference so GC does not free it
+    size = ctypes.sizeof(params)
+    return bytes(ctypes.string_at(ctypes.byref(params), size))
+
+
+
+def DeriveKey(target, mechanism, base_key_blob, attrs):
+    """
+    Returns: (new_key: bytes, checksum: bytes)
+    Raises: PKCS11Error on failure
+    """
+
+    # Convert attributes and mechanisms to C types
+    try: 
+        attrarena, t, tcount = convert_attributes_to_ck(attrs)
+
+        # Create mechanism directly
+        mecharena = Arena()
+        mech_struct = CK_MECHANISM()
+        mech_struct.mechanism = c_ulong(mechanism.Mechanism)
+
+        if mechanism.Parameter:
+            buf_ptr, buf_len = mecharena.allocate(mechanism.Parameter)
+            mech_struct.pParameter = buf_ptr
+            mech_struct.ulParameterLen = buf_len
+        else:
+            mech_struct.pParameter = None
+            mech_struct.ulParameterLen = 0
+            
+        # --- Base key (optional) ---
+        if not base_key_blob:
+             baseKeyC = CK_BYTE_PTR()
+             baseKeyLenC = CK_ULONG(0)
+        else:
+             base_buf = ctypes.create_string_buffer(base_key_blob)
+             baseKeyC = ctypes.cast(base_buf, CK_BYTE_PTR)
+             baseKeyLenC = CK_ULONG(len(base_key_blob))
+
+        # --- Output buffers ---
+        new_key_buf = ctypes.create_string_buffer(MAX_BLOB_SIZE)
+        newKeyC = ctypes.cast(new_key_buf, CK_BYTE_PTR)
+        newKeyLenC = CK_ULONG(MAX_BLOB_SIZE)
+
+        csum_buf = ctypes.create_string_buffer(MAX_BLOB_SIZE)
+        cSumC = ctypes.cast(csum_buf, CK_BYTE_PTR)
+        cSumLenC = CK_ULONG(MAX_BLOB_SIZE)
+
+        # --- Empty data ---
+        dataC = CK_BYTE_PTR()
+        dataLenC = CK_ULONG(0)
+
+        # --- Call EP11 ---
+        rv = ep11.m_DeriveKey( mech_struct, t, tcount, baseKeyC, baseKeyLenC, dataC, dataLenC, LoginBlob, LoginBlobLen, newKeyC, ctypes.byref(newKeyLenC), cSumC, ctypes.byref(cSumLenC), target)
+
+        if rv != CKR_OK:
+            raise toError(rv)
+
+        # --- Slice outputs like Go ---
+        new_key = new_key_buf.raw[:newKeyLenC.value]
+        checksum = csum_buf.raw[:cSumLenC.value]
+
+        return new_key, checksum
+
+    finally:
+        mecharena.Free()
