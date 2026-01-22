@@ -248,320 +248,348 @@ def GenerateKey(target, mechanism, temp_attributes):
     attrarena, t, tcount = convert_attributes_to_ck(temp_attributes)
 
     # Create mechanism directly
-    mecharena = Arena()
-    mech_struct = CK_MECHANISM()
-    mech_struct.mechanism = c_ulong(mechanism.Mechanism)
+    try:
+        mecharena = Arena()
+        mech_struct = CK_MECHANISM()
+        mech_struct.mechanism = c_ulong(mechanism.Mechanism)
 
-    if mechanism.Parameter:
-        buf_ptr, buf_len = mecharena.allocate(mechanism.Parameter)
-        mech_struct.pParameter = buf_ptr
-        mech_struct.ulParameterLen = buf_len
-    else:
-        mech_struct.pParameter = None
-        mech_struct.ulParameterLen = 0
+        if mechanism.Parameter:
+            buf_ptr, buf_len = mecharena.allocate(mechanism.Parameter)
+            mech_struct.pParameter = buf_ptr
+            mech_struct.ulParameterLen = buf_len
+        else:
+            mech_struct.pParameter = None
+            mech_struct.ulParameterLen = 0
 
-    #   try:
-    Key = create_string_buffer(MAX_BLOB_SIZE)
-    CheckSum = create_string_buffer(MAX_CSUMSIZE)
+        #   try:
+        Key = create_string_buffer(MAX_BLOB_SIZE)
+        CheckSum = create_string_buffer(MAX_CSUMSIZE)
 
-    keyLenC = c_ulong(len(Key))
-    checkSumLenC = c_ulong(len(Key))
+        keyLenC = c_ulong(len(Key))
+        checkSumLenC = c_ulong(len(Key))
 
-    rc = ep11.m_GenerateKey(
-        byref(mech_struct), t, tcount,
-        LoginBlob, LoginBlobLen,
-        cast(Key, POINTER(c_ubyte)), byref(keyLenC),
-        cast(CheckSum, POINTER(c_ubyte)), byref(checkSumLenC),
-        target
-    )
+        rc = ep11.m_GenerateKey(
+            byref(mech_struct), t, tcount,
+            LoginBlob, LoginBlobLen,
+            cast(Key, POINTER(c_ubyte)), byref(keyLenC),
+            cast(CheckSum, POINTER(c_ubyte)), byref(checkSumLenC),
+            target
+        )
 
-    if rc != CKR_OK:
-        return None, toError(rc)
+        if rc != CKR_OK:
+            return None, toError(rc)
 
-    key_bytes = Key.raw[:keyLenC.value]
-    checksum_bytes = CheckSum.raw[:checkSumLenC.value]
+        key_bytes = Key.raw[:keyLenC.value]
+        checksum_bytes = CheckSum.raw[:checkSumLenC.value]
 
-    return key_bytes, checksum_bytes , None
+        return key_bytes, checksum_bytes , None
+
+    finally:
+        mecharena.Free()
+
 
 ############################################################################################
 ############################################################################################
 
 def EncryptSingle(target, mechanism, key, data):
-    mecharena = Arena()
-    mech_struct = CK_MECHANISM()
-    mech_struct.mechanism = c_ulong(mechanism.Mechanism)
+    try:
+        mecharena = Arena()
+        mech_struct = CK_MECHANISM()
+        mech_struct.mechanism = c_ulong(mechanism.Mechanism)
 
-    if mechanism.Parameter:
-        buf_ptr, buf_len = mecharena.allocate(mechanism.Parameter)
-        mech_struct.pParameter = buf_ptr
-        mech_struct.ulParameterLen = buf_len
-    else:
-        mech_struct.pParameter = None
-        mech_struct.ulParameterLen = 0   
+        if mechanism.Parameter:
+            buf_ptr, buf_len = mecharena.allocate(mechanism.Parameter)
+            mech_struct.pParameter = buf_ptr
+            mech_struct.ulParameterLen = buf_len
+        else:
+            mech_struct.pParameter = None
+            mech_struct.ulParameterLen = 0   
 
-    key_buf = (c_ubyte * len(key))(*key)
-    keyC = cast(key_buf, POINTER(c_ubyte))
-    keyLenC = c_ulong(len(key))
+        key_buf = (c_ubyte * len(key))(*key)
+        keyC = cast(key_buf, POINTER(c_ubyte))
+        keyLenC = c_ulong(len(key))
 
-    # Prepare data
-    data_buf = (c_ubyte * len(data))(*data)
-    dataC = cast(data_buf, POINTER(c_ubyte))
-    dataLenC = c_ulong(len(data))
+        # Prepare data
+        data_buf = (c_ubyte * len(data))(*data)
+        dataC = cast(data_buf, POINTER(c_ubyte))
+        dataLenC = c_ulong(len(data))
 
-    # Prepare signature buffer
-    cipher = create_string_buffer(MAX_BLOB_SIZE)
-    cipherC = cast(cipher, POINTER(c_ubyte))
-    cipherLenC = c_ulong(MAX_BLOB_SIZE)
+        # Prepare signature buffer
+        cipher = create_string_buffer(MAX_BLOB_SIZE)
+        cipherC = cast(cipher, POINTER(c_ubyte))
+        cipherLenC = c_ulong(MAX_BLOB_SIZE)
 
-    # Call m_EncryptSingle
-    rv = ep11.m_EncryptSingle(keyC, keyLenC, byref(mech_struct), dataC, dataLenC, cipherC, byref(cipherLenC), target)
+        # Call m_EncryptSingle
+        rv = ep11.m_EncryptSingle(keyC, keyLenC, byref(mech_struct), dataC, dataLenC, cipherC, byref(cipherLenC), target)
 
-    if rv != CKR_OK:
-        e1 = toError(rv)
-        return None, e1
+        if rv != CKR_OK:
+            e1 = toError(rv)
+            return None, e1
 
-    # Resize the cipher array based on the returned cipher length
-    cipher = cipher[:cipherLenC.value]
-    return cipher, None
+        # Resize the cipher array based on the returned cipher length
+        cipher = cipher[:cipherLenC.value]
+        return cipher, None
+    finally:
+        mecharena.Free()
+
 
 ############################################################################################
 ############################################################################################
 
 def DecryptSingle(target, mechanism, key, cipher):
-    mecharena = Arena()
-    mech_struct = CK_MECHANISM()
-    mech_struct.mechanism = c_ulong(mechanism.Mechanism)
+    try:
+        mecharena = Arena()
+        mech_struct = CK_MECHANISM()
+        mech_struct.mechanism = c_ulong(mechanism.Mechanism)
 
-    if mechanism.Parameter:
-        buf_ptr, buf_len = mecharena.allocate(mechanism.Parameter)
-        mech_struct.pParameter = buf_ptr
-        mech_struct.ulParameterLen = buf_len
-    else:
-        mech_struct.pParameter = None
-        mech_struct.ulParameterLen = 0   
+        if mechanism.Parameter:
+            buf_ptr, buf_len = mecharena.allocate(mechanism.Parameter)
+            mech_struct.pParameter = buf_ptr
+            mech_struct.ulParameterLen = buf_len
+        else:
+            mech_struct.pParameter = None
+            mech_struct.ulParameterLen = 0   
 
-    key_buf = (c_ubyte * len(key))(*key)
-    keyC = cast(key_buf, POINTER(c_ubyte))
-    keyLenC = c_ulong(len(key))
+        key_buf = (c_ubyte * len(key))(*key)
+        keyC = cast(key_buf, POINTER(c_ubyte))
+        keyLenC = c_ulong(len(key))
 
-    # Prepare data
-    cipher_buf = (c_ubyte * len(cipher))(*cipher)
-    cipherC = cast(cipher_buf, POINTER(c_ubyte))
-    cipherLenC = c_ulong(len(cipher))
+        # Prepare data
+        cipher_buf = (c_ubyte * len(cipher))(*cipher)
+        cipherC = cast(cipher_buf, POINTER(c_ubyte))
+        cipherLenC = c_ulong(len(cipher))
 
-    # Prepare signature buffer
-    plain = create_string_buffer(MAX_BLOB_SIZE)
-    plainC = cast(plain, POINTER(c_ubyte))
-    plainLenC = c_ulong(MAX_BLOB_SIZE)
+        # Prepare signature buffer
+        plain = create_string_buffer(MAX_BLOB_SIZE)
+        plainC = cast(plain, POINTER(c_ubyte))
+        plainLenC = c_ulong(MAX_BLOB_SIZE)
 
-    # Call m_EncryptSingle
-    rv = ep11.m_DecryptSingle(keyC, keyLenC, byref(mech_struct), cipherC, cipherLenC, plainC, byref(plainLenC), target)
+        # Call m_EncryptSingle
+        rv = ep11.m_DecryptSingle(keyC, keyLenC, byref(mech_struct), cipherC, cipherLenC, plainC, byref(plainLenC), target)
 
-    if rv != CKR_OK:
-        e1 = toError(rv)
-        return None, e1
+        if rv != CKR_OK:
+            e1 = toError(rv)
+            return None, e1
 
-    # Resize the cipher array based on the returned cipher length
-    plain = plain[:plainLenC.value]
-    return plain, None
+        # Resize the cipher array based on the returned cipher length
+        plain = plain[:plainLenC.value]
+        return plain, None
+    finally:
+        mecharena.Free()
+
 
 ############################################################################################
 ############################################################################################
 
 def ReencryptSingle(target, mechanism1, mechanism2, key1, key2, data):
-    mech1arena = Arena()
-    mech1_struct = CK_MECHANISM()
-    mech1_struct.mechanism = c_ulong(mechanism1.Mechanism)
+    try: 
+        mech1arena = Arena()
+        mech1_struct = CK_MECHANISM()
+        mech1_struct.mechanism = c_ulong(mechanism1.Mechanism)
 
-    if mechanism1.Parameter:
-        buf_ptr, buf_len = mech1arena.allocate(mechanism1.Parameter)
-        mech1_struct.pParameter = buf_ptr
-        mech1_struct.ulParameterLen = buf_len
-    else:
-        mech1_struct.pParameter = None
-        mech1_struct.ulParameterLen = 0  
+        if mechanism1.Parameter:
+            buf_ptr, buf_len = mech1arena.allocate(mechanism1.Parameter)
+            mech1_struct.pParameter = buf_ptr
+            mech1_struct.ulParameterLen = buf_len
+        else:
+            mech1_struct.pParameter = None
+            mech1_struct.ulParameterLen = 0  
 
-    mech2arena = Arena()
-    mech2_struct = CK_MECHANISM()
-    mech2_struct.mechanism = c_ulong(mechanism2.Mechanism)
+        mech2arena = Arena()
+        mech2_struct = CK_MECHANISM()
+        mech2_struct.mechanism = c_ulong(mechanism2.Mechanism)
 
-    if mechanism2.Parameter:
-        buf_ptr, buf_len = mech2arena.allocate(mechanism2.Parameter)
-        mech2_struct.pParameter = buf_ptr
-        mech2_struct.ulParameterLen = buf_len
-    else:
-        mech2_struct.pParameter = None
-        mech2_struct.ulParameterLen = 0       
+        if mechanism2.Parameter:
+            buf_ptr, buf_len = mech2arena.allocate(mechanism2.Parameter)
+            mech2_struct.pParameter = buf_ptr
+            mech2_struct.ulParameterLen = buf_len
+        else:
+            mech2_struct.pParameter = None
+            mech2_struct.ulParameterLen = 0       
 
-    key1_buf = (c_ubyte * len(key1))(*key1)
-    key1C = cast(key1_buf, POINTER(c_ubyte))
-    key1LenC = c_ulong(len(key1))
+        key1_buf = (c_ubyte * len(key1))(*key1)
+        key1C = cast(key1_buf, POINTER(c_ubyte))
+        key1LenC = c_ulong(len(key1))
 
-    key2_buf = (c_ubyte * len(key2))(*key2)
-    key2C = cast(key2_buf, POINTER(c_ubyte))
-    key2LenC = c_ulong(len(key2))
+        key2_buf = (c_ubyte * len(key2))(*key2)
+        key2C = cast(key2_buf, POINTER(c_ubyte))
+        key2LenC = c_ulong(len(key2))
 
-    # Prepare data
-    data_buf = (c_ubyte * len(data))(*data)
-    dataC = cast(data_buf, POINTER(c_ubyte))
-    dataLenC = c_ulong(len(data))
+        # Prepare data
+        data_buf = (c_ubyte * len(data))(*data)
+        dataC = cast(data_buf, POINTER(c_ubyte))
+        dataLenC = c_ulong(len(data))
 
-    # Prepare signature buffer
-    cipher = create_string_buffer(MAX_BLOB_SIZE)
-    cipherC = cast(cipher, POINTER(c_ubyte))
-    cipherLenC = c_ulong(MAX_BLOB_SIZE)
+        # Prepare signature buffer
+        cipher = create_string_buffer(MAX_BLOB_SIZE)
+        cipherC = cast(cipher, POINTER(c_ubyte))
+        cipherLenC = c_ulong(MAX_BLOB_SIZE)
 
-    # Call m_EncryptSingle
-    rv = ep11.m_ReencryptSingle(key1C, key1LenC, key2C, key2LenC, byref(mech1_struct), byref(mech2_struct), dataC, dataLenC, cipherC, byref(cipherLenC), target)
+        # Call m_EncryptSingle
+        rv = ep11.m_ReencryptSingle(key1C, key1LenC, key2C, key2LenC, byref(mech1_struct), byref(mech2_struct), dataC, dataLenC, cipherC, byref(cipherLenC), target)
 
-    if rv != CKR_OK:
-        e1 = toError(rv)
-        return None, e1
+        if rv != CKR_OK:
+            e1 = toError(rv)
+            return None, e1
 
-    # Resize the cipher array based on the returned cipher length
-    cipher = cipher[:cipherLenC.value]
-    return cipher, None
+        # Resize the cipher array based on the returned cipher length
+        cipher = cipher[:cipherLenC.value]
+        return cipher, None
+    finally:
+        mech1arena.Free()
+        mech2arena.Free()
 
 ############################################################################################
 ############################################################################################
 
 def GenerateKeyPair(target, mechanism, pk_attributes, sk_attributes):
+    try:
+        # Convert attributes and mechanisms to C types
+        attrarena1, t1, tcount1 = convert_attributes_to_ck(pk_attributes)
+        attrarena2, t2, tcount2 = convert_attributes_to_ck(sk_attributes)
 
-    # Convert attributes and mechanisms to C types
-    attrarena1, t1, tcount1 = convert_attributes_to_ck(pk_attributes)
-    attrarena2, t2, tcount2 = convert_attributes_to_ck(sk_attributes)
+        # Create mechanism directly
+        mecharena = Arena()
+        mech_struct = CK_MECHANISM()
+        mech_struct.mechanism = c_ulong(mechanism.Mechanism)
 
-    # Create mechanism directly
-    mecharena = Arena()
-    mech_struct = CK_MECHANISM()
-    mech_struct.mechanism = c_ulong(mechanism.Mechanism)
+        if mechanism.Parameter:
+            buf_ptr, buf_len = mecharena.allocate(mechanism.Parameter)
+            mech_struct.pParameter = buf_ptr
+            mech_struct.ulParameterLen = buf_len
+        else:
+            mech_struct.pParameter = None
+            mech_struct.ulParameterLen = 0
 
-    if mechanism.Parameter:
-        buf_ptr, buf_len = mecharena.allocate(mechanism.Parameter)
-        mech_struct.pParameter = buf_ptr
-        mech_struct.ulParameterLen = buf_len
-    else:
-        mech_struct.pParameter = None
-        mech_struct.ulParameterLen = 0
+        skKey = create_string_buffer(MAX_BLOB_SIZE)
+        pkKey = create_string_buffer(MAX_BLOB_SIZE)
 
-    skKey = create_string_buffer(MAX_BLOB_SIZE)
-    pkKey = create_string_buffer(MAX_BLOB_SIZE)
+        skkeyLenC = c_ulong(len(skKey))
+        pkkeyLenC = c_ulong(len(pkKey))
 
-    skkeyLenC = c_ulong(len(skKey))
-    pkkeyLenC = c_ulong(len(pkKey))
+        rc = ep11.m_GenerateKeyPair(
+            byref(mech_struct), t1, tcount1, t2, tcount2,
+            LoginBlob, LoginBlobLen,
+            cast(skKey, POINTER(c_ubyte)), byref(skkeyLenC),
+            cast(pkKey, POINTER(c_ubyte)), byref(pkkeyLenC),
+            target
+        )
 
-    rc = ep11.m_GenerateKeyPair(
-        byref(mech_struct), t1, tcount1, t2, tcount2,
-        LoginBlob, LoginBlobLen,
-        cast(skKey, POINTER(c_ubyte)), byref(skkeyLenC),
-        cast(pkKey, POINTER(c_ubyte)), byref(pkkeyLenC),
-        target
-    )
+        if rc != CKR_OK:
+            return None, toError(rc)
 
-    if rc != CKR_OK:
-        return None, toError(rc)
+        sk_bytes = skKey.raw[:skkeyLenC.value]
+        pk_bytes = pkKey.raw[:pkkeyLenC.value]
+     
+        return pk_bytes,sk_bytes, None
+    finally:
+        mecharena.Free()
 
-    sk_bytes = skKey.raw[:skkeyLenC.value]
-    pk_bytes = pkKey.raw[:pkkeyLenC.value]
- 
-    return pk_bytes,sk_bytes, None
 
 ############################################################################################
 ############################################################################################
 
 def SignSingle(target , mechanism, sk , data  ):
-    # Create mechanism directly
-    mecharena = Arena()
-    mech_struct = CK_MECHANISM()
-    mech_struct.mechanism = c_ulong(mechanism.Mechanism)
+    try:
+        # Create mechanism directly
+        mecharena = Arena()
+        mech_struct = CK_MECHANISM()
+        mech_struct.mechanism = c_ulong(mechanism.Mechanism)
 
-    if mechanism.Parameter:
-        buf_ptr, buf_len = mecharena.allocate(mechanism.Parameter)
-        mech_struct.pParameter = buf_ptr
-        mech_struct.ulParameterLen = buf_len
-    else:
-        mech_struct.pParameter = None
-        mech_struct.ulParameterLen = 0
-    
-    if sk:
-        sk_buf = (c_ubyte * len(sk))(*sk)
-        privatekeyC = cast(sk_buf, POINTER(c_ubyte))
-        privatekeyLenC = c_ulong(len(sk))
-    else:
-        privatekeyC = None
-        privatekeyLenC = c_ulong(0)
+        if mechanism.Parameter:
+            buf_ptr, buf_len = mecharena.allocate(mechanism.Parameter)
+            mech_struct.pParameter = buf_ptr
+            mech_struct.ulParameterLen = buf_len
+        else:
+            mech_struct.pParameter = None
+            mech_struct.ulParameterLen = 0
+        
+        if sk:
+            sk_buf = (c_ubyte * len(sk))(*sk)
+            privatekeyC = cast(sk_buf, POINTER(c_ubyte))
+            privatekeyLenC = c_ulong(len(sk))
+        else:
+            privatekeyC = None
+            privatekeyLenC = c_ulong(0)
 
-    # Prepare data
-    data_buf = (c_ubyte * len(data))(*data)
-    dataC = cast(data_buf, POINTER(c_ubyte))
-    datalenC = c_ulong(len(data))
+        # Prepare data
+        data_buf = (c_ubyte * len(data))(*data)
+        dataC = cast(data_buf, POINTER(c_ubyte))
+        datalenC = c_ulong(len(data))
 
-    # Prepare signature buffer
-    sig = create_string_buffer(MAX_BLOB_SIZE)
-    sigC = cast(sig, POINTER(c_ubyte))
-    siglenC = c_ulong(MAX_BLOB_SIZE)
+        # Prepare signature buffer
+        sig = create_string_buffer(MAX_BLOB_SIZE)
+        sigC = cast(sig, POINTER(c_ubyte))
+        siglenC = c_ulong(MAX_BLOB_SIZE)
 
-    # Call C function
-    rv = ep11.m_SignSingle(
-        privatekeyC, privatekeyLenC,
-        byref(mech_struct),
-        dataC, datalenC,
-        sigC, byref(siglenC),
-        target
-    )
+        # Call C function
+        rv = ep11.m_SignSingle(
+            privatekeyC, privatekeyLenC,
+            byref(mech_struct),
+            dataC, datalenC,
+            sigC, byref(siglenC),
+            target
+        )
 
-    if rv != CKR_OK:
-        return None, f"Sign error: {hex(rv)}"
+        if rv != CKR_OK:
+            return None, f"Sign error: {hex(rv)}"
 
-    return sig.raw[:siglenC.value], None
+        return sig.raw[:siglenC.value], None
+    finally:
+        mecharena.Free()
+
 
 ############################################################################################
 ############################################################################################
 
 def VerifySingle(target, mechanism, pk, data, sig):
-    # Create mechanism directly
-    mecharena = Arena()
-    mech_struct = CK_MECHANISM()
-    mech_struct.mechanism = c_ulong(mechanism.Mechanism)
+    try:
+        # Create mechanism directly
+        mecharena = Arena()
+        mech_struct = CK_MECHANISM()
+        mech_struct.mechanism = c_ulong(mechanism.Mechanism)
 
-    if mechanism.Parameter:
-        buf_ptr, buf_len = mecharena.allocate(mechanism.Parameter)
-        mech_struct.pParameter = buf_ptr
-        mech_struct.ulParameterLen = buf_len
-    else:
-        mech_struct.pParameter = None
-        mech_struct.ulParameterLen = 0
+        if mechanism.Parameter:
+            buf_ptr, buf_len = mecharena.allocate(mechanism.Parameter)
+            mech_struct.pParameter = buf_ptr
+            mech_struct.ulParameterLen = buf_len
+        else:
+            mech_struct.pParameter = None
+            mech_struct.ulParameterLen = 0
 
-    # Ensure inputs are bytes
-    if isinstance(data, str):
-        data = data.encode("utf-8")
-    if isinstance(sig, str):
-        sig = sig.encode("utf-8")
+        # Ensure inputs are bytes
+        if isinstance(data, str):
+            data = data.encode("utf-8")
+        if isinstance(sig, str):
+            sig = sig.encode("utf-8")
 
-    # Convert public key, data, signature to ctypes arrays
-    pk_buf = (c_ubyte * len(pk))(*pk)
-    pk_len = c_ulong(len(pk))
+        # Convert public key, data, signature to ctypes arrays
+        pk_buf = (c_ubyte * len(pk))(*pk)
+        pk_len = c_ulong(len(pk))
 
-    data_buf = (c_ubyte * len(data))(*data)
-    data_len = c_ulong(len(data))
+        data_buf = (c_ubyte * len(data))(*data)
+        data_len = c_ulong(len(data))
 
-    sig_buf = (c_ubyte * len(sig))(*sig)
-    sig_len = c_ulong(len(sig))
+        sig_buf = (c_ubyte * len(sig))(*sig)
+        sig_len = c_ulong(len(sig))
 
-    # Call the C function
-    rv = ep11.m_VerifySingle(
-        cast(pk_buf, POINTER(c_ubyte)), pk_len,
-        byref(mech_struct),
-        cast(data_buf, POINTER(c_ubyte)), data_len,
-        cast(sig_buf, POINTER(c_ubyte)), sig_len,
-        target
-    )
+        # Call the C function
+        rv = ep11.m_VerifySingle(
+            cast(pk_buf, POINTER(c_ubyte)), pk_len,
+            byref(mech_struct),
+            cast(data_buf, POINTER(c_ubyte)), data_len,
+            cast(sig_buf, POINTER(c_ubyte)), sig_len,
+            target
+        )
 
-    # Check return value
-    if rv == 0:
-        return None
-    else:
-        return toError(rv)
+        # Check return value
+        if rv == 0:
+            return None
+        else:
+            return toError(rv)
+    finally:
+        mecharena.Free()
+
 
 ############################################################################################
 ############################################################################################
@@ -579,7 +607,6 @@ def GenerateRandom(target, length):
     
     # Convert random data to a Python byte array and return
     return bytearray(random_data)
-
 
 
 ############################################################################################
@@ -756,205 +783,112 @@ def GetMechanismList(target):
 ############################################################################################
 
 def WrapKey(target, mechanism, kek, key):    
+    try:
+        mecharena = Arena()
+        mech_struct = CK_MECHANISM()
+        mech_struct.mechanism = c_ulong(mechanism.Mechanism)
 
-    mecharena = Arena()
-    mech_struct = CK_MECHANISM()
-    mech_struct.mechanism = c_ulong(mechanism.Mechanism)
+        if mechanism.Parameter:
+            buf_ptr, buf_len = mecharena.allocate(mechanism.Parameter)
+            mech_struct.pParameter = buf_ptr
+            mech_struct.ulParameterLen = buf_len
+        else:
+            mech_struct.pParameter = None
+            mech_struct.ulParameterLen = 0
 
-    if mechanism.Parameter:
-        buf_ptr, buf_len = mecharena.allocate(mechanism.Parameter)
-        mech_struct.pParameter = buf_ptr
-        mech_struct.ulParameterLen = buf_len
-    else:
-        mech_struct.pParameter = None
-        mech_struct.ulParameterLen = 0
+        if kek:
+            kek_buf = (c_ubyte * len(kek))(*kek)
+            kekC = cast(kek_buf, POINTER(c_ubyte))
+            kekLenC = c_ulong(len(kek))
+        else:
+            kekC = None
+            LenC = c_ulong(0)
 
-    if kek:
-        kek_buf = (c_ubyte * len(kek))(*kek)
-        kekC = cast(kek_buf, POINTER(c_ubyte))
-        kekLenC = c_ulong(len(kek))
-    else:
-        kekC = None
-        LenC = c_ulong(0)
+        if key:
+            key_buf = (c_ubyte * len(key))(*key)
+            keyC = cast(key_buf, POINTER(c_ubyte))
+            keyLenC = c_ulong(len(key))
+        else:
+            keyC = None
+            LenC = c_ulong(0)
 
-    if key:
-        key_buf = (c_ubyte * len(key))(*key)
-        keyC = cast(key_buf, POINTER(c_ubyte))
-        keyLenC = c_ulong(len(key))
-    else:
-        keyC = None
-        LenC = c_ulong(0)
+         # Prepare wrappedKeynature buffer
+        wrappedKey = create_string_buffer(MAX_BLOB_SIZE)
+        wrappedKeyC = cast(wrappedKey, POINTER(c_ubyte))
+        wrappedKeyLenC = c_ulong(MAX_BLOB_SIZE)
 
-     # Prepare wrappedKeynature buffer
-    wrappedKey = create_string_buffer(MAX_BLOB_SIZE)
-    wrappedKeyC = cast(wrappedKey, POINTER(c_ubyte))
-    wrappedKeyLenC = c_ulong(MAX_BLOB_SIZE)
+        rv = ep11.m_WrapKey(keyC, keyLenC, kekC, kekLenC, None, 0 , byref(mech_struct), wrappedKeyC, byref(wrappedKeyLenC), target)
 
-    rv = ep11.m_WrapKey(keyC, keyLenC, kekC, kekLenC, None, 0 , byref(mech_struct), wrappedKeyC, byref(wrappedKeyLenC), target)
+        if rv != CKR_OK:
+            e1 = toError(rv)
+            return None, e1
 
-    if rv != CKR_OK:
-        e1 = toError(rv)
-        return None, e1
+        # Resize the cipher array based on the returned cipher length
+        wrappedKey = wrappedKey[:wrappedKeyLenC.value]
+        return wrappedKey, None
+    finally:
+        mecharena.Free()
 
-    # Resize the cipher array based on the returned cipher length
-    wrappedKey = wrappedKey[:wrappedKeyLenC.value]
-    return wrappedKey, None
 
 ############################################################################################
 ############################################################################################
 
 def UnwrapKey(target, mechanism, kek, key, attr):  
-    mecharena = Arena()
-    mech_struct = CK_MECHANISM()
-    mech_struct.mechanism = c_ulong(mechanism.Mechanism)
+    try:
+        mecharena = Arena()
+        mech_struct = CK_MECHANISM()
+        mech_struct.mechanism = c_ulong(mechanism.Mechanism)
 
-    attrarena, t, tcount = convert_attributes_to_ck(attr)
+        attrarena, t, tcount = convert_attributes_to_ck(attr)
 
-    if mechanism.Parameter:
-        buf_ptr, buf_len = mecharena.allocate(mechanism.Parameter)
-        mech_struct.pParameter = buf_ptr
-        mech_struct.ulParameterLen = buf_len
-    else:
-        mech_struct.pParameter = None
-        mech_struct.ulParameterLen = 0
+        if mechanism.Parameter:
+            buf_ptr, buf_len = mecharena.allocate(mechanism.Parameter)
+            mech_struct.pParameter = buf_ptr
+            mech_struct.ulParameterLen = buf_len
+        else:
+            mech_struct.pParameter = None
+            mech_struct.ulParameterLen = 0
 
-    if kek:
-        kek_buf = (c_ubyte * len(kek))(*kek)
-        kekC = cast(kek_buf, POINTER(c_ubyte))
-        kekLenC = c_ulong(len(kek))
-    else:
-        kekC = None
-        LenC = c_ulong(0)
+        if kek:
+            kek_buf = (c_ubyte * len(kek))(*kek)
+            kekC = cast(kek_buf, POINTER(c_ubyte))
+            kekLenC = c_ulong(len(kek))
+        else:
+            kekC = None
+            LenC = c_ulong(0)
 
-    if key:
-        key_buf = (c_ubyte * len(key))(*key)
-        keyC = cast(key_buf, POINTER(c_ubyte))
-        keyLenC = c_ulong(len(key))
-    else:
-        keyC = None
-        LenC = c_ulong(0)
+        if key:
+            key_buf = (c_ubyte * len(key))(*key)
+            keyC = cast(key_buf, POINTER(c_ubyte))
+            keyLenC = c_ulong(len(key))
+        else:
+            keyC = None
+            LenC = c_ulong(0)
 
-     # Prepare wrappedKeynature buffer
-    unwrappedKey = create_string_buffer(MAX_BLOB_SIZE)
-    unwrappedKeyC = cast(unwrappedKey, POINTER(c_ubyte))
-    unwrappedKeyLenC = c_ulong(MAX_BLOB_SIZE)
+         # Prepare wrappedKeynature buffer
+        unwrappedKey = create_string_buffer(MAX_BLOB_SIZE)
+        unwrappedKeyC = cast(unwrappedKey, POINTER(c_ubyte))
+        unwrappedKeyLenC = c_ulong(MAX_BLOB_SIZE)
 
-    # Prepare wrappedKeynature buffer
-    cSum = create_string_buffer(MAX_CSUMSIZE)
-    cSumC = cast(cSum, POINTER(c_ubyte))
-    cSumLenC = c_ulong(MAX_CSUMSIZE)
+        # Prepare wrappedKeynature buffer
+        cSum = create_string_buffer(MAX_CSUMSIZE)
+        cSumC = cast(cSum, POINTER(c_ubyte))
+        cSumLenC = c_ulong(MAX_CSUMSIZE)
 
-    rv = ep11.m_UnwrapKey(keyC, keyLenC, kekC, kekLenC, None, 0, LoginBlob, LoginBlobLen, byref(mech_struct), t, tcount, unwrappedKeyC, byref(unwrappedKeyLenC), cSumC, byref(cSumLenC), target)
-    if rv != CKR_OK:
-        e1 = toError(rv)
-        return None, None,e1
+        rv = ep11.m_UnwrapKey(keyC, keyLenC, kekC, kekLenC, None, 0, LoginBlob, LoginBlobLen, byref(mech_struct), t, tcount, unwrappedKeyC, byref(unwrappedKeyLenC), cSumC, byref(cSumLenC), target)
+        if rv != CKR_OK:
+            e1 = toError(rv)
+            return None, None,e1
 
-    # Resize the cipher array based on the returned cipher length
-    unwrappedKey = unwrappedKey[:unwrappedKeyLenC.value]
-    cSum = cSum[:cSumLenC.value]
-    return unwrappedKey, cSum, None
+        # Resize the cipher array based on the returned cipher length
+        unwrappedKey = unwrappedKey[:unwrappedKeyLenC.value]
+        cSum = cSum[:cSumLenC.value]
+        return unwrappedKey, cSum, None
+    finally:
+        mecharena.Free()
 
 ############################################################################################
 ############################################################################################
-CK_ULONG = ctypes.c_ulong
-CK_RSA_PKCS_MGF_TYPE = CK_ULONG                 # alias
-CK_RSA_PKCS_OAEP_SOURCE_TYPE = CK_ULONG 
-CK_VOID_PTR  = ctypes.c_void_p 
-CK_BYTE_PTR = ctypes.POINTER(ctypes.c_ubyte)
-
-# Define CK_RSA_PKCS_OAEP_PARAMS in Python
-class CK_RSA_PKCS_OAEP_PARAMS(ctypes.Structure):
-    _fields_ = [
-        ("hashAlg", CK_MECHANISM_TYPE),
-        ("mgf", CK_RSA_PKCS_MGF_TYPE),
-        ("source", CK_RSA_PKCS_OAEP_SOURCE_TYPE),
-        ("pSourceData", CK_VOID_PTR),
-        ("ulSourceDataLen", CK_ULONG),
-    ]
-
-
-def NewOAEPParams(hash_alg: int, mgf: int, source_type: int, source_data: bytes):
-    params = CK_RSA_PKCS_OAEP_PARAMS()
-
-    params.hashAlg = CK_MECHANISM_TYPE(hash_alg)
-    params.mgf = CK_RSA_PKCS_MGF_TYPE(mgf)
-    params.source = CK_RSA_PKCS_OAEP_SOURCE_TYPE(source_type)
-
-    if not source_data:
-        # No source data
-        params.pSourceData = CK_VOID_PTR(None)
-        params.ulSourceDataLen = CK_ULONG(0)
-    else:
-        # Allocate a buffer for the source data
-        buf = ctypes.create_string_buffer(source_data)
-        params.pSourceData = ctypes.cast(buf, CK_VOID_PTR)
-        params.ulSourceDataLen = CK_ULONG(len(source_data))
-
-        # Important: keep buffer alive by attaching to object
-        params._source_buf = buf
-
-    # Return raw bytes like Go's memBytes()
-    size = ctypes.sizeof(params)
-    return bytes(ctypes.string_at(ctypes.byref(params), size))
-
-
-SECP256K1_ORDER = int(
-    "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141", 16
-)
-
-def normalize_low_s_raw64(sig64: bytes, curve_order=SECP256K1_ORDER) -> bytes:
-    if len(sig64) != 64:
-        raise ValueError("Signature must be exactly 64 bytes (r||s)")
-
-    r = int.from_bytes(sig64[0:32], "big")
-    s = int.from_bytes(sig64[32:64], "big")
-
-    half_n = curve_order // 2
-    # Already low-S? Return original bytes
-    if s <= half_n:
-        return sig64
-    s = SECP256K1_ORDER - s
-    return r.to_bytes(32, "big") + s.to_bytes(32, "big")
-
-class CK_IBM_BTC_DERIVE_PARAMS(ctypes.Structure):
-    _fields_ = [
-        ("type", CK_ULONG),
-        ("childKeyIndex", CK_ULONG),
-        ("pChainCode", CK_BYTE_PTR),
-        ("ulChainCodeLen", CK_ULONG),
-        ("version", CK_ULONG),
-    ]
-
-def NewBTCDeriveParams(
-    derive_type: int,
-    child_key_index: int,
-    chain_code: bytes,
-    version: int,
-) -> bytes:
-
-    params = CK_IBM_BTC_DERIVE_PARAMS()
-
-    params.type = ctypes.c_ulong(derive_type)
-    params.childKeyIndex = ctypes.c_ulong(child_key_index)
-    params.version = ctypes.c_ulong(version)
-
-    if not chain_code:
-        # No chain code
-        params.pChainCode = ctypes.POINTER(ctypes.c_ubyte)()
-        params.ulChainCodeLen = ctypes.c_ulong(0)
-    else:
-        # Allocate buffer for chain code
-        buf = ctypes.create_string_buffer(chain_code)
-        params.pChainCode = ctypes.cast(buf, ctypes.POINTER(ctypes.c_ubyte))
-        params.ulChainCodeLen = ctypes.c_ulong(len(chain_code))
-
-        # Prevent GC while params lives
-        params._chain_buf = buf
-    # IMPORTANT: keep a reference so GC does not free it
-    size = ctypes.sizeof(params)
-    return bytes(ctypes.string_at(ctypes.byref(params), size))
-
-
 
 def DeriveKey(target, mechanism, base_key_blob, attrs):
     """
@@ -1002,10 +936,11 @@ def DeriveKey(target, mechanism, base_key_blob, attrs):
         dataLenC = CK_ULONG(0)
 
         # --- Call EP11 ---
-        rv = ep11.m_DeriveKey( mech_struct, t, tcount, baseKeyC, baseKeyLenC, dataC, dataLenC, LoginBlob, LoginBlobLen, newKeyC, ctypes.byref(newKeyLenC), cSumC, ctypes.byref(cSumLenC), target)
+        rv = ep11.m_DeriveKey( byref(mech_struct), t, tcount, baseKeyC, baseKeyLenC, dataC, dataLenC, LoginBlob, LoginBlobLen, newKeyC, ctypes.byref(newKeyLenC), cSumC, ctypes.byref(cSumLenC), target)
 
         if rv != CKR_OK:
-            raise toError(rv)
+            e1 = toError(rv)
+            return None, e1
 
         # --- Slice outputs like Go ---
         new_key = new_key_buf.raw[:newKeyLenC.value]
@@ -1015,3 +950,107 @@ def DeriveKey(target, mechanism, base_key_blob, attrs):
 
     finally:
         mecharena.Free()
+
+
+############################################################################################
+############################################################################################
+CK_ULONG = ctypes.c_ulong
+CK_RSA_PKCS_MGF_TYPE = CK_ULONG                 # alias
+CK_RSA_PKCS_OAEP_SOURCE_TYPE = CK_ULONG 
+CK_VOID_PTR  = ctypes.c_void_p 
+CK_BYTE_PTR = ctypes.POINTER(ctypes.c_ubyte)
+
+# Define CK_RSA_PKCS_OAEP_PARAMS in Python
+class CK_RSA_PKCS_OAEP_PARAMS(ctypes.Structure):
+    _fields_ = [
+        ("hashAlg", CK_MECHANISM_TYPE),
+        ("mgf", CK_RSA_PKCS_MGF_TYPE),
+        ("source", CK_RSA_PKCS_OAEP_SOURCE_TYPE),
+        ("pSourceData", CK_VOID_PTR),
+        ("ulSourceDataLen", CK_ULONG),
+    ]
+
+
+def NewOAEPParams(hash_alg: int, mgf: int, source_type: int, source_data: bytes):
+    params = CK_RSA_PKCS_OAEP_PARAMS()
+
+    params.hashAlg = CK_MECHANISM_TYPE(hash_alg)
+    params.mgf = CK_RSA_PKCS_MGF_TYPE(mgf)
+    params.source = CK_RSA_PKCS_OAEP_SOURCE_TYPE(source_type)
+
+    if not source_data:
+        # No source data
+        params.pSourceData = CK_VOID_PTR(None)
+        params.ulSourceDataLen = CK_ULONG(0)
+    else:
+        # Allocate a buffer for the source data
+        buf = ctypes.create_string_buffer(source_data)
+        params.pSourceData = ctypes.cast(buf, CK_VOID_PTR)
+        params.ulSourceDataLen = CK_ULONG(len(source_data))
+
+        # Important: keep buffer alive by attaching to object
+        params._source_buf = buf
+
+    # Return raw bytes like Go's memBytes()
+    size = ctypes.sizeof(params)
+    return bytes(ctypes.string_at(ctypes.byref(params), size))
+
+############################################################################################
+
+SECP256K1_ORDER = int(
+    "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141", 16
+)
+
+def normalize_low_s_raw64(sig64: bytes, curve_order=SECP256K1_ORDER) -> bytes:
+    if len(sig64) != 64:
+        raise ValueError("Signature must be exactly 64 bytes (r||s)")
+
+    r = int.from_bytes(sig64[0:32], "big")
+    s = int.from_bytes(sig64[32:64], "big")
+
+    half_n = curve_order // 2
+    # Already low-S? Return original bytes
+    if s <= half_n:
+        return sig64
+    s = SECP256K1_ORDER - s
+    return r.to_bytes(32, "big") + s.to_bytes(32, "big")
+
+############################################################################################
+
+class CK_IBM_BTC_DERIVE_PARAMS(ctypes.Structure):
+    _fields_ = [
+        ("type", CK_ULONG),
+        ("childKeyIndex", CK_ULONG),
+        ("pChainCode", CK_BYTE_PTR),
+        ("ulChainCodeLen", CK_ULONG),
+        ("version", CK_ULONG),
+    ]
+
+def NewBTCDeriveParams(
+    derive_type: int,
+    child_key_index: int,
+    chain_code: bytes,
+    version: int,
+) -> bytes:
+
+    params = CK_IBM_BTC_DERIVE_PARAMS()
+
+    params.type = ctypes.c_ulong(derive_type)
+    params.childKeyIndex = ctypes.c_ulong(child_key_index)
+    params.version = ctypes.c_ulong(version)
+
+    if not chain_code:
+        # No chain code
+        params.pChainCode = ctypes.POINTER(ctypes.c_ubyte)()
+        params.ulChainCodeLen = ctypes.c_ulong(0)
+    else:
+        # Allocate buffer for chain code
+        buf = ctypes.create_string_buffer(chain_code)
+        params.pChainCode = ctypes.cast(buf, ctypes.POINTER(ctypes.c_ubyte))
+        params.ulChainCodeLen = ctypes.c_ulong(len(chain_code))
+
+        # Prevent GC while params lives
+        params._chain_buf = buf
+    # IMPORTANT: keep a reference so GC does not free it
+    size = ctypes.sizeof(params)
+    return bytes(ctypes.string_at(ctypes.byref(params), size))
