@@ -38,12 +38,14 @@ def slip10_deriveKey(
     try:
         mech = Mechanism( CKM_IBM_BTC_DERIVE, NewBTCDeriveParams( derive_type,child_key_index , chain_code, XCP_BTC_VERSION))
 
-        new_key_bytes, checksum = DeriveKey(
+        new_key_bytes, checksum , error = DeriveKey(
             target,
             mech,
             base_key,
             DeriveKeyTemplate,
         )
+        if error:
+            print(f"Derive failed: {error}")
     except Exception as e:
         raise RuntimeError(f"Derived Child Key request error: {e}") from e
 
@@ -202,21 +204,35 @@ def main():
     # --- Decode MASTERSEED from hex ---
     masterseed_hex = os.environ.get("MASTERSEED")
     if not masterseed_hex:
-        raise RuntimeError("MASTERSEED environment variable not set")
+        params = None
+        mech = Mechanism(CKM_GENERIC_SECRET_KEY_GEN,params)
+        keyTemplate = [
+          Attribute(CKA_VALUE_LEN, 32),
+          Attribute(CKA_VERIFY, True),
+          Attribute(CKA_DERIVE, True),
+          Attribute(CKA_SIGN, True),
+          Attribute(CKA_KEY_TYPE, CKK_GENERIC_SECRET),
+          Attribute(CKA_CLASS, CKO_SECRET_KEY),
+          Attribute(CKA_EXTRACTABLE, False),
+          Attribute(CKA_IBM_USE_AS_DATA, True),
+        ]
+        seed, csum, error = GenerateKey(target, mech, keyTemplate)
 
-    seed = binascii.unhexlify(masterseed_hex)
-
-    # --- Path split ---
-    #path = sys.argv[1].encode().split(b"/")
+        if error:
+           print(f"Error: {error}")
+        else:
+           print(f"Generated seed key: {seed.hex()}")
+    else:
+        seed = binascii.unhexlify(masterseed_hex)
 
     # --- SLIP-10 master derivation ---
-    sk, chaincode = slip10_deriveKey( target, CK_IBM_BTC_SLIP0010_MASTERK, 0, False, seed, None)
+    sk, chaincode  = slip10_deriveKey( target, CK_IBM_BTC_SLIP0010_MASTERK, 0, False, seed, None)
     print(f"Generated derived key: {sk.hex()}")
     print(f"Generated derived chaincode: {chaincode.hex()}")
-    childsk, childchaincode = slip10_deriveKey( target, CK_IBM_BTC_SLIP0010_PRV2PRV, 1, True, sk, chaincode)
+    childsk, childchaincode  = slip10_deriveKey( target, CK_IBM_BTC_SLIP0010_PRV2PRV, 1, True, sk, chaincode)
     print(f"Generated derived childkey: {childsk.hex()}")
     print(f"Generated derived childchaincode: {childchaincode.hex()}")
-    childpub, childpubchaincode = slip10_deriveKey( target, CK_IBM_BTC_SLIP0010_PRV2PUB, 1, True, sk, chaincode)
+    childpub, childpubchaincode  = slip10_deriveKey( target, CK_IBM_BTC_SLIP0010_PRV2PUB, 1, True, sk, chaincode)
     print(f"Generated derived childpubkey: {childpub.hex()}")
     print(f"Generated derived childpubchaincode: {childpubchaincode.hex()}")
     

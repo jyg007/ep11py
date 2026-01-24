@@ -277,7 +277,7 @@ def GenerateKey(target, mechanism, temp_attributes):
         )
 
         if rc != CKR_OK:
-            return None, toError(rc)
+            return None, None, toError(rc)
 
         key_bytes = Key.raw[:keyLenC.value]
         checksum_bytes = CheckSum.raw[:checkSumLenC.value]
@@ -892,7 +892,7 @@ def UnwrapKey(target, mechanism, kek, key, attr):
 
 def DeriveKey(target, mechanism, base_key_blob, attrs):
     """
-    Returns: (new_key: bytes, checksum: bytes)
+    Returns: (new_key: bytes, checksum: bytes, error)
     Raises: PKCS11Error on failure
     """
 
@@ -940,13 +940,13 @@ def DeriveKey(target, mechanism, base_key_blob, attrs):
 
         if rv != CKR_OK:
             e1 = toError(rv)
-            return None, e1
+            return None, None, e1
 
         # --- Slice outputs like Go ---
         new_key = new_key_buf.raw[:newKeyLenC.value]
         checksum = csum_buf.raw[:cSumLenC.value]
 
-        return new_key, checksum
+        return new_key, checksum , None
 
     finally:
         mecharena.Free()
